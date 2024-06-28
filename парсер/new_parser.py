@@ -17,7 +17,7 @@ import telebot
 # подключаем бота
 TOKEN = config.TOKEN
 bot = telebot.TeleBot(TOKEN, parse_mode=None)
-CHANNEL_ID = "-1002193342806"
+CHANNEL_ID = config.CHANNEL_ID
 
 
 # отправка сообщения в канал
@@ -190,79 +190,88 @@ def start_parsing(stop_event):
         time.sleep(random.uniform(295, 310))
 
 
+users = config.users
+
+
 @bot.message_handler(commands=['start_bot'])
 def start_command(message):
-    global parse_thread
-    if parse_thread is None or not parse_thread.is_alive():
-        stop_event.clear()
-        parse_thread = threading.Thread(target=start_parsing, args=(stop_event, ))
-        parse_thread.start()
-        bot.reply_to(message, "Парсинг запущен.")
-    else:
-        bot.reply_to(message, "Парсинг уже запущен.")
+    if message.from_user.id in users:
+        global parse_thread
+        if parse_thread is None or not parse_thread.is_alive():
+            stop_event.clear()
+            parse_thread = threading.Thread(target=start_parsing, args=(stop_event, ))
+            parse_thread.start()
+            bot.reply_to(message, "Парсинг запущен.")
+        else:
+            bot.reply_to(message, "Парсинг уже запущен.")
 
 
 @bot.message_handler(commands=['stop_bot'])
 def stop_command(message):
-    global parse_thread
-    if parse_thread is not None and parse_thread.is_alive():
-        stop_event.set()
-        parse_thread.join()
-        bot.reply_to(message, "Парсинг остановлен.")
-    else:
-        bot.reply_to(message, "Парсинг не запущен.")
+    if message.from_user.id in users:
+        global parse_thread
+        if parse_thread is not None and parse_thread.is_alive():
+            stop_event.set()
+            parse_thread.join()
+            bot.reply_to(message, "Парсинг остановлен.")
+        else:
+            bot.reply_to(message, "Парсинг не запущен.")
 
 
 @bot.message_handler(commands=['status'])
 def status_command(message):
-    if parse_thread is not None and parse_thread.is_alive():
-        bot.reply_to(message, "Парсинг запущен.")
-    else:
-        bot.reply_to(message, "Парсинг остановлен.")
+    if message.from_user.id in users:
+        if parse_thread is not None and parse_thread.is_alive():
+            bot.reply_to(message, "Парсинг запущен.")
+        else:
+            bot.reply_to(message, "Парсинг остановлен.")
 
 
 @bot.message_handler(commands=['add_link'])
 def get_query(message):
-    mes = bot.send_message(message.chat.id, "Напишите ссылку")
-    try:
-        bot.register_next_step_handler(mes, get_price)
-    except Exception as e:
-        bot.reply_to(message, f'Ошибка: {e}')
+    if message.from_user.id in users:
+        mes = bot.send_message(message.chat.id, "Напишите ссылку")
+        try:
+            bot.register_next_step_handler(mes, get_price)
+        except Exception as e:
+            bot.reply_to(message, f'Ошибка: {e}')
 
 
 def get_price(message):
-    global query_link
-    query_link = message.text
-    if not query_link.startswith("http://") and not query_link.startswith("https://"):
-        bot.reply_to(message, "Ссылка должна начинаться с http:// или https://")
-        return
+    if message.from_user.id in users:
+        global query_link
+        query_link = message.text
+        if not query_link.startswith("http://") and not query_link.startswith("https://"):
+            bot.reply_to(message, "Ссылка должна начинаться с http:// или https://")
+            return
 
-    try:
-        driver = create_driver()
-        driver.get(query_link)
-        driver.quit()
-        mes = bot.send_message(message.chat.id, "Напишите цену")
         try:
-            bot.register_next_step_handler(mes, add_query)
+            driver = create_driver()
+            driver.get(query_link)
+            driver.quit()
+            mes = bot.send_message(message.chat.id, "Напишите цену")
+            try:
+                bot.register_next_step_handler(mes, add_query)
+            except Exception as e:
+                bot.reply_to(message, f'Ошибка: {e}')
         except Exception as e:
             bot.reply_to(message, f'Ошибка: {e}')
-    except Exception as e:
-        bot.reply_to(message, f'Ошибка: {e}')
 
 
 def add_query(message):
-    query_price = message.text
-    conn = conn_to_db()
-    cursor = conn.cursor()
-    cursor.execute("""INSERT INTO query (url, price)
-                   VALUES (%s, %s)
-                   ON CONFLICT (url) DO UPDATE SET
-                   url = EXCLUDED.url,
-                   price = EXCLUDED.price""", (query_link, query_price))
-    conn.commit()
-    cursor.close()
-    conn.close()
-    bot.send_message(message.chat.id, "Добавлена ссылка")
+    if message.from_user.id in users:
+        query_price = message.text
+        conn = conn_to_db()
+        cursor = conn.cursor()
+        cursor.execute("""INSERT INTO query (url, price)
+                    VALUES (%s, %s)
+                    ON CONFLICT (url) DO UPDATE SET
+                    url = EXCLUDED.url,
+                    price = EXCLUDED.price""", (query_link, query_price))
+        conn.commit()
+        cursor.close()
+        conn.close()
+        bot.send_message(message.chat.id, "Добавлена ссылка")
 
 # Создание базы данных при первом запуске
 # create_database()

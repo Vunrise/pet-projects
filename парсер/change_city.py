@@ -31,8 +31,7 @@ driver.execute_cdp_cmd("Page.addScriptToEvaluateOnNewDocument", {
 
 
 # URL сайта Ozon
-url = 'https://www.ozon.ru/category/igrovye-pristavki-15801/valve-84099638/?deny_category_prediction=true&from_global=true&sorting=price&text=steam+deck'
-
+url = config.url
 # Переход на сайт
 driver.get(url)
 
